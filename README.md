@@ -47,7 +47,7 @@ This code is developed and tested on an ubuntu machine with python 3.8 installed
      ```bash
     python3 client1.py
     ```
-11. Run client2.py in second terminal 
+11. Run client2.py in third terminal 
      ```bash
     python3 client2.py
     ```
