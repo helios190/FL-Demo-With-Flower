@@ -4,6 +4,7 @@ from utils import model, getData, showDataDist, getMnistDataSet, plotClientData
 
 model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])
 
+# Data Banking Tabular Data
 x_train, y_train, x_test, y_test = getMnistDataSet()
 
 dist = [4000, 10, 4000, 10, 4000, 10, 4000, 10, 4000, 10]
@@ -13,7 +14,6 @@ showDataDist(y_train)
 
 results_list = []
 
-# Define Flower client
 class FlwrClient(fl.client.NumPyClient):
     def __init__(self, model, x_train, y_train, x_test, y_test):
         self.model = model
@@ -30,10 +30,10 @@ class FlwrClient(fl.client.NumPyClient):
 
     def fit(self, parameters, config):
         """Train parameters on the locally held training set."""
-        # Update local model parameters
+
         self.model.set_weights(parameters)
 
-        # Train the model using hyperparameters from config
+
         history = self.model.fit(
             self.x_train,
             self.y_train,
@@ -43,7 +43,7 @@ class FlwrClient(fl.client.NumPyClient):
             verbose=0
         )
         
-        # Return updated model parameters and results
+
         parameters_prime = self.model.get_weights()
         num_examples_train = len(self.x_train)
         results = {
@@ -59,10 +59,9 @@ class FlwrClient(fl.client.NumPyClient):
     def evaluate(self, parameters, config):
         """Evaluate parameters on the locally held test set."""
 
-        # Update local model with global parameters
+
         self.model.set_weights(parameters)
 
-        # Evaluate global model parameters on the local test data and return results
         loss, accuracy = self.model.evaluate(self.x_test, self.y_test, 32,verbose=0)
         num_examples_test = len(self.x_test)
         print("Evaluation accuracy on Client 1 after weight aggregation : ", accuracy)

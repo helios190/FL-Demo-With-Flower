@@ -1,5 +1,5 @@
-import flwr as fl
 from typing import Dict, Optional, Tuple
+import flwr as fl
 from utils import model, getMnistDataSet, plotServerData
 
 model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])

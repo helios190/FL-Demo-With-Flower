@@ -47,7 +47,6 @@ def genOutDir():
 
 def plotServerData(data):
     df = pd.DataFrame(data)
-    # plt.plot(df['loss'],color = 'b', label = 'loss')
     plt.plot(df['accuracy'],color = 'g', label = 'accuracy')
     plt.legend(loc = 'lower right')
     plt.xlabel('Rounds')
