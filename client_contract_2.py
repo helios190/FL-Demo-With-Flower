@@ -7,8 +7,8 @@ import json
 w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
 
 # Smart contract address and ABI
-contract_address = "0x673De118fe9Fb764667f0F5259fDBC062920D7Cb"
-contract_address = w3.to_checksum_address(contract_address)
+contract_address = "0x4B7046Bea0EeFD2157582b3268eD7833802aa5B2"
+contract_address = w3.toChecksumAddress(contract_address)
 
 with open('/Users/bintangrestubawono/Documents/fl7/FL-Demo-With-Flower/contracts/artifacts/contracts/FederatedLearning.sol/FederatedLearning.json') as f:
     contract_abi = json.load(f)["abi"]
@@ -16,14 +16,14 @@ with open('/Users/bintangrestubawono/Documents/fl7/FL-Demo-With-Flower/contracts
 contract = w3.eth.contract(address=contract_address, abi=contract_abi)
 
 # MetaMask account details
-account = "0x1186D7e8b9C4211572fcd56271B971E9680255c1"
-account = w3.to_checksum_address(account)
-private_key = "0x60d2873b7a41749e723fd1f0fd29ab9175ae265cfdc238ccf9dbf6c2cbe05625"
+account = "0x5cA883aEb3a2cA1a85d8884884cE4fe8EAF1aE44"
+account = w3.toChecksumAddress(account)
+private_key = "0xd9ff5c6651c0470e7ce0f97b2fe69f1c05d7065287c73d8232f845d3c7bebb85"
 
 # Check account balance
 def check_balance():
     balance_wei = w3.eth.get_balance(account)
-    balance_eth = w3.from_wei(balance_wei, 'ether')
+    balance_eth = w3.fromWei(balance_wei, 'ether')
     print(f"Account balance: {balance_eth} ETH")
     return balance_eth
 
@@ -41,7 +41,7 @@ tx = contract.functions.registerClient().build_transaction({
     'from': account,
     'nonce': nonce,
     'gas': 2000000,
-    'gasPrice': w3.to_wei('50', 'gwei')
+    'gasPrice': w3.toWei('50', 'gwei')
 })
 
 signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
@@ -77,19 +77,27 @@ class FlwrClient(fl.client.NumPyClient):
     def fit(self, parameters, config):
         self.model.set_weights(parameters)
 
+        # Check balance before deducting gas fee for training
+        token_balance = contract.functions.getBalance(account).call()
+        print(f"Current Balance before training: {token_balance} tokens")
+
+        if token_balance < 10:  # Ensure enough balance for the transaction
+            raise ValueError(f"Insufficient token balance: {token_balance}. Minimum required is 10 tokens.")
+
         # Deduct gas fee for training
         nonce = w3.eth.get_transaction_count(account)
         tx = contract.functions.useGas(account, 10).build_transaction({
             'from': account,
             'nonce': nonce,
             'gas': 2000000,
-            'gasPrice': w3.to_wei('50', 'gwei')
+            'gasPrice': w3.toWei('50', 'gwei')
         })
 
         signed_tx = w3.eth.account.sign_transaction(tx, private_key=private_key)
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         w3.eth.wait_for_transaction_receipt(tx_hash)
 
+        # Continue with model training after gas deduction
         history = self.model.fit(
             self.x_train,
             self.y_train,

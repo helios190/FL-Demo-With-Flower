@@ -8,20 +8,24 @@ import json
 w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
 
 # Smart contract address and ABI
-contract_address = "0x673De118fe9Fb764667f0F5259fDBC062920D7Cb"
-contract_address = w3.to_checksum_address(contract_address)
+contract_address = "0x4B7046Bea0EeFD2157582b3268eD7833802aa5B2"
+contract_address = w3.toChecksumAddress(contract_address)
 
+# Load contract ABI
 with open('/Users/bintangrestubawono/Documents/fl7/FL-Demo-With-Flower/contracts/artifacts/contracts/FederatedLearning.sol/FederatedLearning.json') as f:
     contract_abi = json.load(f)["abi"]
 
+# Initialize contract
 contract = w3.eth.contract(address=contract_address, abi=contract_abi)
 
+# Compile the model
 model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])
 
 results_list = []
 
 def get_eval_fn(model):
     x_train, y_train, x_test, y_test = getMnistDataSet()
+
     def evaluate(server_round: int, parameters: fl.common.NDArrays, config: Dict[str, fl.common.Scalar]) -> Optional[Tuple[float, Dict[str, fl.common.Scalar]]]:
         model.set_weights(parameters)
         loss, accuracy = model.evaluate(x_test, y_test)
@@ -32,10 +36,14 @@ def get_eval_fn(model):
         # Check if the "client_ids" key is present in the config
         if "client_ids" in config:
             for client in config["client_ids"]:
-                tx_hash = contract.functions.registerClient().transact({'from': client})
-                w3.eth.waitForTransactionReceipt(tx_hash)
+                try:
+                    tx_hash = contract.functions.registerClient().transact({'from': client})
+                    w3.eth.waitForTransactionReceipt(tx_hash)
+                except Exception as e:
+                    print(f"Error registering client {client}: {e}")
 
         return loss, {"accuracy": accuracy}
+
     return evaluate
 
 strategy = fl.server.strategy.FedAvg(evaluate_fn=get_eval_fn(model))

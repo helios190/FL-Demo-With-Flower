@@ -2,13 +2,14 @@ import flwr as fl
 from utils import model, getData, showDataDist, getMnistDataSet, plotClientData
 from web3 import Web3
 import json
+import os
 
 # Connect to local Ethereum node
 w3 = Web3(Web3.HTTPProvider("http://127.0.0.1:8545"))
 
 # Smart contract address and ABI
-contract_address = "0x673De118fe9Fb764667f0F5259fDBC062920D7Cb"
-contract_address = w3.to_checksum_address(contract_address)
+contract_address = "0x4B7046Bea0EeFD2157582b3268eD7833802aa5B2"
+contract_address = w3.toChecksumAddress(contract_address)
 
 with open('/Users/bintangrestubawono/Documents/fl7/FL-Demo-With-Flower/contracts/artifacts/contracts/FederatedLearning.sol/FederatedLearning.json') as f:
     contract_abi = json.load(f)["abi"]
@@ -16,14 +17,14 @@ with open('/Users/bintangrestubawono/Documents/fl7/FL-Demo-With-Flower/contracts
 contract = w3.eth.contract(address=contract_address, abi=contract_abi)
 
 # MetaMask account details
-account = "0x154d38607C24446868075Cffb307EfaA91B9F675"
-account = w3.to_checksum_address(account)
-private_key = "0x1fa89ae6d5d1ac2ca94f68ddbe84cb166116303520d5c424f6a24ea2db6aba84"
+account = "0xcB767eA2c38D6e79Fc27f0a313F14e916f8c57e2"
+account = w3.toChecksumAddress(account)
+private_key = "0x8b16b36fef9e6262209710a84af6e9c9887b8b1452721639923e535e645d67eb"
 
 # Check account balance
 def check_balance():
     balance_wei = w3.eth.get_balance(account)
-    balance_eth = w3.from_wei(balance_wei, 'ether')
+    balance_eth = w3.fromWei(balance_wei, 'ether')
     print(f"Account balance: {balance_eth} ETH")
     return balance_eth
 
@@ -32,8 +33,11 @@ if balance_eth < 0.1:
     raise ValueError("Insufficient funds in the account. Please add more Ether to the account.")
 
 # Get the initial balance in tokens
-token_balance = contract.functions.getBalance(account).call()
-print(f"Initial Balance: {token_balance} tokens")
+try:
+    token_balance = contract.functions.getBalance(account).call()
+    print(f"Initial Balance: {token_balance} tokens")
+except Exception as e:
+    print(f"Error getting initial balance: {e}")
 
 # Register client and receive tokens
 nonce = w3.eth.get_transaction_count(account)
@@ -52,7 +56,22 @@ w3.eth.wait_for_transaction_receipt(tx_hash)
 token_balance = contract.functions.getBalance(account).call()
 print(f"Balance after registration: {token_balance} tokens")
 
+# Compile the model
 model.compile("adam", "sparse_categorical_crossentropy", metrics=["accuracy"])
+
+# Directory to save and load model weights
+MODEL_WEIGHTS_DIR = './model_weights'
+os.makedirs(MODEL_WEIGHTS_DIR, exist_ok=True)
+
+# Function to save the global model weights
+def save_global_model(round_number):
+    model.save_weights(os.path.join(MODEL_WEIGHTS_DIR, f'global_model_round_{round_number}.h5'))
+    print(f"Global model weights saved for round {round_number}.")
+
+# Function to load the global model weights
+def load_global_model(round_number):
+    model.load_weights(os.path.join(MODEL_WEIGHTS_DIR, f'global_model_round_{round_number}.h5'))
+    print(f"Global model weights loaded for round {round_number}.")
 
 # Creating Client Using Blockchain
 x_train, y_train, x_test, y_test = getMnistDataSet()
@@ -72,10 +91,22 @@ class FlwrClient(fl.client.NumPyClient):
         raise Exception("Not implemented")
 
     def get_parameters(self, config):
+        # Return the current local model parameters
         return model.get_weights()
 
     def fit(self, parameters, config):
+        # Set the global model parameters
         self.model.set_weights(parameters)
+
+        # Save global model after setting parameters
+        save_global_model(config.get("round", 0))  # Save the model after each round
+
+        # Check balance before deducting gas fee for training
+        token_balance = contract.functions.getBalance(account).call()
+        print(f"Current Balance before training: {token_balance} tokens")
+        
+        if token_balance < 10:  # Ensure enough balance for the transaction
+            raise ValueError(f"Insufficient token balance: {token_balance}. Minimum required is 10 tokens.")
 
         # Deduct gas fee for training
         nonce = w3.eth.get_transaction_count(account)
@@ -90,6 +121,7 @@ class FlwrClient(fl.client.NumPyClient):
         tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
         w3.eth.wait_for_transaction_receipt(tx_hash)
 
+        # Continue with model training after gas deduction
         history = self.model.fit(
             self.x_train,
             self.y_train,
@@ -112,6 +144,7 @@ class FlwrClient(fl.client.NumPyClient):
         return parameters_prime, num_examples_train, results
 
     def evaluate(self, parameters, config):
+        # Set the global model parameters for evaluation
         self.model.set_weights(parameters)
         loss, accuracy = self.model.evaluate(self.x_test, self.y_test, 32, verbose=0)
         num_examples_test = len(self.x_test)
@@ -121,8 +154,9 @@ class FlwrClient(fl.client.NumPyClient):
 
 # Start Flower client
 client = FlwrClient(model, x_train, y_train, x_test, y_test)
-fl.client.start_numpy_client(
+fl.client.start_client(
     server_address="localhost:8080", 
-    client=client
+    client=client.to_client()
 )
+
 plotClientData(results_list)
